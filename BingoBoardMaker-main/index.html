@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BingoGen + Stitcher</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0d0d0d;
+      --surface:    #141414;
+      --surface2:   #1c1c1c;
+      --border:     #252525;
+      --border2:    #2e2e2e;
+      --accent:     #e8c547;
+      --accent-dim: #a88e30;
+      --text:       #d8d8d8;
+      --text-dim:   #505050;
+      --success:    #5ab87a;
+      --red:        #e05555;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px 100px;
+    }
+
+    /* ─── Header ─────────────────────────────────────── */
+    header { margin-bottom: 44px; text-align: left; width: 100%; max-width: 560px; }
+
+    .tool-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 52px;
+      letter-spacing: 0.04em;
+      color: #fff;
+      line-height: 1;
+    }
+    .tool-name span { color: var(--accent); }
+
+    .tool-sub {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+
+    /* ─── Pipeline connector ─────────────────────────── */
+    .pipeline {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .phase {
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .phase + .phase { border-top: none; }
+
+    .phase-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+    .phase-header:hover { background: var(--surface2); }
+
+    .phase-num {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      color: var(--accent);
+      line-height: 1;
+      min-width: 22px;
+    }
+
+    .phase-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 0.08em;
+      color: #fff;
+    }
+
+    .phase-status {
+      margin-left: auto;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      padding: 4px 9px;
+      border: 1px solid var(--border2);
+      color: var(--text-dim);
+    }
+    .phase-status.done {
+      border-color: var(--success);
+      color: var(--success);
+      background: rgba(90,184,122,0.05);
+    }
+
+    .phase-chevron {
+      color: var(--text-dim);
+      font-size: 11px;
+      transition: transform 0.2s;
+      margin-left: 6px;
+    }
+    .phase.collapsed .phase-chevron { transform: rotate(-90deg); }
+
+    .phase-body {
+      padding: 22px;
+    }
+    .phase.collapsed .phase-body { display: none; }
+
+    /* ─── Connector arrow ────────────────────────────── */
+    .connector {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 0;
+      position: relative;
+    }
+    .connector::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0; bottom: 0;
+      width: 1px;
+      background: var(--border2);
+    }
+    .connector-arrow {
+      background: var(--bg);
+      padding: 2px 10px;
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      border: 1px solid var(--border2);
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ─── Shared card / field styles ─────────────────── */
+    .section-label {
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 18px;
+    }
+
+    .field { margin-bottom: 22px; }
+    .field:last-child { margin-bottom: 0; }
+
+    label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      padding: 10px 13px;
+      outline: none;
+      transition: border-color 0.2s;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"]:focus { border-color: var(--accent); }
+
+    .slider-row { display: flex; align-items: center; gap: 16px; }
+
+    input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 3px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px; height: 18px;
+      background: var(--accent);
+      border-radius: 0;
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 18px; height: 18px;
+      background: var(--accent);
+      border: none; border-radius: 0;
+    }
+    input[type="range"]:hover::-webkit-slider-thumb { background: #f0d060; }
+
+    .slider-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      color: var(--accent);
+      min-width: 24px;
+      text-align: right;
+      line-height: 1;
+    }
+
+    .total-display {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 13px 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .total-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; }
+    .total-right { display: flex; align-items: baseline; gap: 8px; }
+    .total-value { font-family: 'Bebas Neue', sans-serif; font-size: 26px; color: #fff; line-height: 1; }
+    .total-sub { font-size: 10px; color: var(--text-dim); }
+
+    /* ─── Buttons ─────────────────────────────────────── */
+    .btn-generate {
+      width: 100%;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.1em;
+      padding: 16px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.08s;
+      display: block;
+      margin-top: 18px;
+    }
+    .btn-generate:hover:not(:disabled) { background: #f0d060; }
+    .btn-generate:active:not(:disabled) { transform: scale(0.99); }
+    .btn-generate:disabled {
+      background: var(--surface2);
+      color: var(--text-dim);
+      cursor: not-allowed;
+    }
+
+    /* ─── Progress ────────────────────────────────────── */
+    .progress-block { margin-top: 18px; display: none; }
+    .progress-block.visible { display: block; }
+
+    .chunk-readout { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+    .chunk-counter { font-family: 'Bebas Neue', sans-serif; font-size: 38px; color: var(--accent); line-height: 1; }
+    .chunk-label { font-size: 11px; color: var(--text-dim); }
+
+    .progress-track { background: var(--bg); height: 3px; margin-bottom: 12px; }
+    .progress-fill { background: var(--accent); height: 100%; width: 0%; transition: width 0.35s ease; }
+    .status-text { font-size: 11px; color: var(--text-dim); min-height: 16px; }
+    .status-text.done { color: var(--success); }
+
+    /* ─── Queue (Stitcher) ────────────────────────────── */
+    .queue-empty {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 20px 0;
+      text-align: center;
+      border: 1px dashed var(--border);
+    }
+
+    .queue-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
+
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      cursor: default;
+      user-select: none;
+      transition: border-color 0.15s;
+    }
+    .queue-item:hover { border-color: var(--border2); }
+    .sortable-ghost { opacity: 0.2; }
+    .sortable-chosen { border-color: var(--accent) !important; }
+
+    .q-handle { color: var(--text-dim); cursor: grab; font-size: 12px; flex-shrink: 0; transition: color 0.15s; }
+    .q-handle:hover { color: var(--accent); }
+    .q-handle:active { cursor: grabbing; }
+
+    .q-icon { font-size: 14px; flex-shrink: 0; opacity: 0.6; }
+
+    .q-info { flex: 1; min-width: 0; }
+    .q-name {
+      font-size: 11px; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: var(--text);
+    }
+    .q-meta { font-size: 9px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.06em; }
+    .q-tag {
+      font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase;
+      padding: 2px 7px; border: 1px solid;
+    }
+    .q-tag.generated { border-color: var(--accent-dim); color: var(--accent); }
+    .q-tag.uploaded  { border-color: var(--border2); color: var(--text-dim); }
+
+    .q-remove {
+      background: none; border: none; color: var(--text-dim);
+      cursor: pointer; font-size: 12px; padding: 3px 7px;
+      transition: color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+    .q-remove:hover { color: var(--red); background: rgba(224,85,85,0.1); }
+
+    /* Drop zone for extra PDFs */
+    .extra-drop {
+      border: 1px dashed var(--border);
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s;
+      margin-bottom: 16px;
+    }
+    .extra-drop:hover, .extra-drop.dragover {
+      border-color: rgba(232,197,71,0.4);
+      background: var(--surface2);
+    }
+    .extra-drop p { font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+    .extra-drop strong { color: var(--accent); }
+    #extra-file-input { display: none; }
+
+    /* Stitch buttons row */
+    .stitch-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .btn-stitch {
+      flex: 1;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 0.1em;
+      padding: 14px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.08s;
+    }
+    .btn-stitch:hover:not(:disabled) { background: #f0d060; }
+    .btn-stitch:active:not(:disabled) { transform: scale(0.99); }
+    .btn-stitch:disabled { background: var(--surface2); color: var(--text-dim); cursor: not-allowed; }
+
+    .btn-clear {
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 14px 18px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .btn-clear:hover { color: var(--text); border-color: var(--border2); }
+
+    .stitch-status {
+      margin-top: 14px;
+      padding: 11px 14px;
+      font-size: 11px;
+      display: none;
+      border: 1px solid;
+    }
+    .stitch-status.loading { display: block; background: var(--surface); border-color: var(--border); color: var(--text); }
+    .stitch-status.success { display: block; background: rgba(90,184,122,0.04); border-color: rgba(90,184,122,0.25); color: var(--success); }
+    .stitch-status.error   { display: block; background: rgba(224,85,85,0.05); border-color: rgba(224,85,85,0.3); color: #f08080; }
+
+    .spinner {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border: 2px solid rgba(232,197,71,0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div style="width:100%;max-width:560px">
+    <header>
+      <div class="tool-name">BINGO<span>GEN</span> + <span>STITCH</span></div>
+      <div class="tool-sub">MTC Tool Suite — Generate &amp; Merge Pipeline</div>
+    </header>
+
+    <div class="pipeline">
+
+      <!-- ═══ PHASE 1: GENERATE ═══════════════════════ -->
+      <div class="phase" id="phase-gen">
+        <div class="phase-header" onclick="togglePhase('gen')">
+          <span class="phase-num">1</span>
+          <span class="phase-title">Generate Cards</span>
+          <span class="phase-status" id="gen-status-badge">Ready</span>
+          <span class="phase-chevron">▾</span>
+        </div>
+        <div class="phase-body">
+          <div class="section-label">Settings</div>
+
+          <div class="field">
+            <label>Pages Per Batch</label>
+            <div class="slider-row">
+              <input type="range" id="pagesPerBatch" min="1" max="10" value="10" oninput="updateTotal()">
+              <div class="slider-value" id="pagesPerBatchVal">10</div>
+            </div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:6px;font-style:italic">2 unique cards per page</div>
+          </div>
+
+          <div class="field">
+            <label>Number of Batches</label>
+            <input type="number" id="numBatches" value="10" min="1" max="500" oninput="updateTotal()">
+          </div>
+
+          <div class="field">
+            <div class="total-display">
+              <span class="total-label">Total</span>
+              <div class="total-right">
+                <span class="total-value" id="totalDisplay">100</span>
+                <span class="total-sub" id="totalCardsSub">pages / 200 cards</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Progress -->
+          <div class="progress-block" id="progressBlock">
+            <div class="section-label" style="margin-top:6px">Progress</div>
+            <div class="chunk-readout">
+              <div class="chunk-counter" id="chunkCounter">0/0</div>
+              <div class="chunk-label" id="chunkLabel">batches complete</div>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="status-text" id="genStatusText"></div>
+          </div>
+
+          <button class="btn-generate" id="generateBtn" onclick="startGeneration()">
+            GENERATE &amp; ADD TO QUEUE
+          </button>
+        </div>
+      </div>
+
+      <!-- ═══ CONNECTOR ════════════════════════════════ -->
+      <div class="connector">
+        <span class="connector-arrow">auto-queued ↓</span>
+      </div>
+
+      <!-- ═══ PHASE 2: STITCH ══════════════════════════ -->
+      <div class="phase" id="phase-stitch">
+        <div class="phase-header" onclick="togglePhase('stitch')">
+          <span class="phase-num">2</span>
+          <span class="phase-title">Stitch PDFs</span>
+          <span class="phase-status" id="stitch-status-badge">Empty</span>
+          <span class="phase-chevron">▾</span>
+        </div>
+        <div class="phase-body">
+          <div class="section-label">Queue</div>
+
+          <div id="queue-empty-msg" class="queue-empty">
+            No PDFs queued — generate batches above or drop files below
+          </div>
+          <div class="queue-list" id="queueList"></div>
+
+          <!-- Drop zone for extra PDFs -->
+          <div class="extra-drop" id="extra-drop" onclick="document.getElementById('extra-file-input').click()">
+            <p>+ Drop additional PDFs or <strong>browse</strong></p>
+            <input type="file" id="extra-file-input" multiple accept=".pdf,application/pdf">
+          </div>
+
+          <div class="stitch-actions">
+            <button class="btn-stitch" id="stitchBtn" disabled onclick="doStitch()">
+              STITCH ALL
+            </button>
+            <button class="btn-clear" id="clearQueueBtn" onclick="clearQueue()">Clear</button>
+          </div>
+
+          <div class="stitch-status" id="stitchStatus"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    /* ─────────────────────────────────────────────────────────
+       CONSTANTS
+    ───────────────────────────────────────────────────────── */
+    const TOTAL_SOURCE_IMAGES = 54;
+    const GRID_COLS = 4, GRID_ROWS = 4;
+    const SRC_W = 737, SRC_H = 1131;
+    const CELL_W = 150;
+    const CELL_H = Math.round(CELL_W * SRC_H / SRC_W);
+    const CANVAS_W = CELL_W * GRID_COLS;
+    const CANVAS_H = CELL_H * GRID_ROWS;
+    const PAGE_W_MM = 279.4, PAGE_H_MM = 215.9, MARGIN_MM = 12.7, GUTTER_MM = 12.7;
+    const GRID_W_MM = (PAGE_W_MM - 2 * MARGIN_MM - GUTTER_MM) / 2;
+    const GRID_H_MM = GRID_W_MM * (CANVAS_H / CANVAS_W);
+    const GRID_Y_MM = MARGIN_MM + (PAGE_H_MM - 2 * MARGIN_MM - GRID_H_MM) / 2;
+    const BORDER_PX = 2, JPEG_Q = 0.88;
+
+    /* ─────────────────────────────────────────────────────────
+       STATE
+    ───────────────────────────────────────────────────────── */
+    let loadedImages = null;
+    let queue = [];          // { name, bytes (Uint8Array), source:'generated'|'uploaded', pageCount }
+    let generating = false;
+
+    /* ─────────────────────────────────────────────────────────
+       PHASE TOGGLE
+    ───────────────────────────────────────────────────────── */
+    function togglePhase(id) {
+      document.getElementById('phase-' + id).classList.toggle('collapsed');
+    }
+
+    /* ─────────────────────────────────────────────────────────
+       PHASE 1 — GENERATION
+    ───────────────────────────────────────────────────────── */
+    function updateTotal() {
+      const ppb = parseInt(document.getElementById('pagesPerBatch').value) || 0;
+      const nb  = parseInt(document.getElementById('numBatches').value)    || 0;
+      const tot = ppb * nb;
+      document.getElementById('pagesPerBatchVal').textContent = ppb;
+      document.getElementById('totalDisplay').textContent     = tot;
+      document.getElementById('totalCardsSub').textContent    = `pages / ${tot * 2} cards`;
+    }
+
+    function loadAllImages() {
+      return new Promise((resolve, reject) => {
+        const images = [];
+        let settled = 0, failed = 0;
+        for (let i = 1; i <= TOTAL_SOURCE_IMAGES; i++) {
+          const img = new Image();
+          img.onload = () => { settled++; if (settled === TOTAL_SOURCE_IMAGES) failed ? reject(new Error(`${failed} image(s) failed`)) : resolve(images); };
+          img.onerror = () => { failed++; settled++; setGenStatus(`⚠ Could not load img${i}.png`); if (settled === TOTAL_SOURCE_IMAGES) reject(new Error(`${failed} image(s) failed`)); };
+          img.src = `png/img${i}.png`;
+          images.push(img);
+        }
+      });
+    }
+
+    function generateCard() {
+      const pool = Array.from({ length: TOTAL_SOURCE_IMAGES }, (_, i) => i);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      return pool.slice(0, GRID_COLS * GRID_ROWS);
+    }
+
+    function drawCard(cardIndices, images) {
+      const canvas = document.createElement('canvas');
+      canvas.width = CANVAS_W; canvas.height = CANVAS_H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      for (let i = 0; i < cardIndices.length; i++) {
+        const col = i % GRID_COLS, row = Math.floor(i / GRID_COLS);
+        const x = col * CELL_W, y = row * CELL_H;
+        ctx.drawImage(images[cardIndices[i]], x, y, CELL_W, CELL_H);
+        ctx.strokeStyle = '#000'; ctx.lineWidth = BORDER_PX;
+        ctx.strokeRect(x + BORDER_PX / 2, y + BORDER_PX / 2, CELL_W - BORDER_PX, CELL_H - BORDER_PX);
+      }
+      return canvas;
+    }
+
+    async function generateChunk(pageCount, images) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+      for (let p = 0; p < pageCount; p++) {
+        if (p > 0) doc.addPage();
+        for (let side = 0; side < 2; side++) {
+          const card   = generateCard();
+          const canvas = drawCard(card, images);
+          const data   = canvas.toDataURL('image/jpeg', JPEG_Q);
+          const x      = side === 0 ? MARGIN_MM : MARGIN_MM + GRID_W_MM + GUTTER_MM;
+          doc.addImage(data, 'JPEG', x, GRID_Y_MM, GRID_W_MM, GRID_H_MM);
+        }
+        if (p % 5 === 4) await sleep(0);
+      }
+      return doc;
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function dateStamp() {
+      const d = new Date();
+      return d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    }
+
+    function setGenStatus(msg, done = false) {
+      const el = document.getElementById('genStatusText');
+      el.textContent = msg;
+      el.className = 'status-text' + (done ? ' done' : '');
+    }
+
+    function setProgress(pct) { document.getElementById('progressFill').style.width = pct + '%'; }
+
+    async function startGeneration() {
+      const pagesPerBatch = parseInt(document.getElementById('pagesPerBatch').value);
+      const numBatches    = parseInt(document.getElementById('numBatches').value);
+      if (!pagesPerBatch || !numBatches || numBatches < 1) { alert('Please enter valid values.'); return; }
+
+      const btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      generating = true;
+
+      const progressBlock = document.getElementById('progressBlock');
+      progressBlock.classList.add('visible');
+      document.getElementById('chunkCounter').textContent = `0/${numBatches}`;
+      document.getElementById('chunkLabel').textContent   = `batch${numBatches !== 1 ? 'es' : ''} complete`;
+      setProgress(0);
+
+      const badge = document.getElementById('gen-status-badge');
+      badge.textContent = 'Working…';
+      badge.className   = 'phase-status';
+
+      try {
+        if (!loadedImages) {
+          setGenStatus('Loading source images…');
+          loadedImages = await loadAllImages();
+        }
+
+        const date = dateStamp();
+        const batchBytes = [];
+
+        for (let i = 0; i < numBatches; i++) {
+          const suffix   = numBatches > 1 ? `_${i + 1}of${numBatches}` : '';
+          const filename = `BINGO_${date}${suffix}.pdf`;
+          setGenStatus(`Building batch ${i + 1} of ${numBatches}… (${pagesPerBatch} pages)`);
+
+          const doc   = await generateChunk(pagesPerBatch, loadedImages);
+          const bytes = doc.output('arraybuffer');
+          batchBytes.push({ name: filename, bytes: new Uint8Array(bytes), pageCount: pagesPerBatch * 2 });
+
+          document.getElementById('chunkCounter').textContent = `${i + 1}/${numBatches}`;
+          setProgress(((i + 1) / numBatches) * 100);
+          await sleep(60);
+        }
+
+        // Add all batches to queue
+        for (const b of batchBytes) {
+          queue.push({ name: b.name, bytes: b.bytes, source: 'generated', pageCount: b.pageCount });
+        }
+        renderQueue();
+
+        setGenStatus(`✓ ${numBatches} batch${numBatches !== 1 ? 'es' : ''} generated and added to queue.`, true);
+        badge.textContent = `${numBatches} added`;
+        badge.className   = 'phase-status done';
+
+        // Auto-expand stitch phase
+        const stitchPhase = document.getElementById('phase-stitch');
+        if (stitchPhase.classList.contains('collapsed')) {
+          stitchPhase.classList.remove('collapsed');
+        }
+
+      } catch (err) {
+        setGenStatus(`Error: ${err.message}`);
+        badge.textContent = 'Error';
+        badge.className   = 'phase-status';
+        loadedImages = null;
+      } finally {
+        btn.disabled = false;
+        generating   = false;
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────
+       PHASE 2 — STITCH
+    ───────────────────────────────────────────────────────── */
+
+    // Sortable
+    let sortable = null;
+    function initSortable() {
+      const list = document.getElementById('queueList');
+      if (sortable) sortable.destroy();
+      sortable = Sortable.create(list, {
+        animation: 150,
+        handle: '.q-handle',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd(evt) {
+          const moved = queue.splice(evt.oldIndex, 1)[0];
+          queue.splice(evt.newIndex, 0, moved);
+        }
+      });
+    }
+
+    function renderQueue() {
+      const list     = document.getElementById('queueList');
+      const emptyMsg = document.getElementById('queue-empty-msg');
+      const badge    = document.getElementById('stitch-status-badge');
+      const stitchBtn = document.getElementById('stitchBtn');
+
+      list.innerHTML = '';
+
+      if (queue.length === 0) {
+        emptyMsg.style.display = 'block';
+        stitchBtn.disabled = true;
+        badge.textContent = 'Empty';
+        badge.className   = 'phase-status';
+        return;
+      }
+
+      emptyMsg.style.display = 'none';
+      stitchBtn.disabled = queue.length < 2;
+
+      const totalPages = queue.reduce((s, e) => s + (e.pageCount || 0), 0);
+      badge.textContent = `${queue.length} file${queue.length !== 1 ? 's' : ''} · ${totalPages}pp`;
+      badge.className   = 'phase-status done';
+
+      queue.forEach((entry, i) => {
+        const item = document.createElement('div');
+        item.className = 'queue-item';
+        item.innerHTML = `
+          <span class="q-handle" title="Drag to reorder">⠿</span>
+          <span class="q-icon">📄</span>
+          <div class="q-info">
+            <div class="q-name" title="${entry.name}">${entry.name}</div>
+            <div class="q-meta">${entry.pageCount ? entry.pageCount + ' pages' : ''} · ${formatBytes(entry.bytes.length)}</div>
+          </div>
+          <span class="q-tag ${entry.source}">${entry.source === 'generated' ? 'generated' : 'uploaded'}</span>
+          <button class="q-remove" data-i="${i}" title="Remove">✕</button>
+        `;
+        list.appendChild(item);
+      });
+
+      list.querySelectorAll('.q-remove').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          queue.splice(+btn.dataset.i, 1);
+          renderQueue();
+          hideStitchStatus();
+        });
+      });
+
+      initSortable();
+    }
+
+    function formatBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1048576).toFixed(1) + ' MB';
+    }
+
+    function clearQueue() {
+      queue = [];
+      renderQueue();
+      hideStitchStatus();
+      const badge = document.getElementById('stitch-status-badge');
+      badge.textContent = 'Empty';
+      badge.className   = 'phase-status';
+    }
+
+    function showStitchStatus(type, html) {
+      const el = document.getElementById('stitchStatus');
+      el.className = 'stitch-status ' + type;
+      el.innerHTML = html;
+    }
+    function hideStitchStatus() {
+      const el = document.getElementById('stitchStatus');
+      el.className = 'stitch-status';
+      el.innerHTML = '';
+    }
+
+    async function getPDFPageCount(bytes) {
+      try {
+        const doc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+        return doc.getPageCount();
+      } catch { return 0; }
+    }
+
+    async function addUploadedPDFs(files) {
+      for (const f of files) {
+        const buf   = await f.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const pages = await getPDFPageCount(bytes);
+        queue.push({ name: f.name, bytes, source: 'uploaded', pageCount: pages });
+      }
+      renderQueue();
+      hideStitchStatus();
+    }
+
+    async function doStitch() {
+      if (queue.length < 2) return;
+      const btn = document.getElementById('stitchBtn');
+      btn.disabled = true;
+      showStitchStatus('loading', '<span class="spinner"></span>Merging PDFs…');
+
+      try {
+        const merged = await PDFLib.PDFDocument.create();
+        for (const entry of queue) {
+          const src   = await PDFLib.PDFDocument.load(entry.bytes);
+          const pages = await merged.copyPages(src, src.getPageIndices());
+          pages.forEach(p => merged.addPage(p));
+        }
+
+        const bytes    = await merged.save();
+        const blob     = new Blob([bytes], { type: 'application/pdf' });
+        const url      = URL.createObjectURL(blob);
+        const a        = document.createElement('a');
+        const filename = `BINGO_MERGED_${dateStamp()}.pdf`;
+        a.href = url; a.download = filename; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+        const totalPages = queue.reduce((s, e) => s + (e.pageCount || 0), 0);
+        showStitchStatus('success',
+          `✓ Merged ${queue.length} PDFs (${totalPages} pages) — saved as <strong style="color:var(--text);font-weight:500">${filename}</strong>`
+        );
+      } catch (err) {
+        showStitchStatus('error', `✗ Error: ${err.message}`);
+      }
+
+      btn.disabled = queue.length < 2;
+    }
+
+    /* ─────────────────────────────────────────────────────────
+       EXTRA DROP ZONE
+    ───────────────────────────────────────────────────────── */
+    const extraDrop  = document.getElementById('extra-drop');
+    const extraInput = document.getElementById('extra-file-input');
+
+    extraDrop.addEventListener('dragover',  e => { e.preventDefault(); extraDrop.classList.add('dragover'); });
+    extraDrop.addEventListener('dragleave', () => extraDrop.classList.remove('dragover'));
+    extraDrop.addEventListener('drop', e => {
+      e.preventDefault();
+      extraDrop.classList.remove('dragover');
+      const pdfs = [...e.dataTransfer.files].filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      if (pdfs.length) addUploadedPDFs(pdfs);
+    });
+    extraInput.addEventListener('change', () => {
+      const pdfs = [...extraInput.files].filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      if (pdfs.length) addUploadedPDFs(pdfs);
+      extraInput.value = '';
+    });
+
+    /* ─────────────────────────────────────────────────────────
+       INIT
+    ───────────────────────────────────────────────────────── */
+    updateTotal();
+    renderQueue();
+  </script>
+</body>
+</html>
