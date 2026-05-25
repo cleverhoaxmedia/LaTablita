@@ -158,6 +158,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     // DOMParser/replaceWith are inert per spec — re-create each with
     // createElement so they execute, awaiting onload for src scripts to
     // preserve ordering (React before ReactDOM before Babel before text/babel).
+    await Promise.race([
+      Promise.all([
+        document.fonts.load('400 1em "Bebas Neue"'),
+        document.fonts.load('300 1em "DM Mono"'),
+        document.fonts.load('400 1em "DM Mono"'),
+        document.fonts.load('500 1em "DM Mono"'),
+      ]),
+      new Promise(r => setTimeout(r, 3000))
+    ]);
     const doc = new DOMParser().parseFromString(template, 'text/html');
     document.documentElement.replaceWith(doc.documentElement);
     const dead = Array.from(document.scripts);
